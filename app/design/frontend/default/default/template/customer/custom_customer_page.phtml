@@ -1,29 +1,478 @@
 <?php
+// Zendesk API Get Ticket Information
 /**
- * customize by: http://istockphp.com
- * like us on facebook: http://www.facebook.com/pages/Istockphp/235451993242578
- * follow us on twitter: http://twitter.com/istockphp
+ * Get either a Gravatar URL or complete image tag for a specified email address.
+ *
+ * @param string $email The email address
+ * @param string $s Size in pixels, defaults to 80px [ 1 - 2048 ]
+ * @param string $d Default imageset to use [ 404 | mm | identicon | monsterid | wavatar ]
+ * @param string $r Maximum rating (inclusive) [ g | pg | r | x ]
+ * @param boole $img True to return a complete IMG tag False for just the URL
+ * @param array $atts Optional, additional key/value attributes to include in the IMG tag
+ * @return String containing either just a URL or a complete image tag
+ * @source http://gravatar.com/site/implement/images/php/
  */
+function get_gravatar($email, $s = 80, $d = 'mm', $r = 'g', $img = false, $atts = array())
+{
+    $url = 'http://www.gravatar.com/avatar/';
+    $url .= md5(strtolower(trim($email)));
+    $url .= "?s=$s&d=$d&r=$r";
+    if ($img) {
+        $url = '<img src="' . $url . '"';
+        foreach ($atts as $key => $val)
+            $url .= ' ' . $key . '="' . $val . '"';
+        $url .= ' />';
+    } //$img
+    return $url;
+}
+function search($array, $key, $value)
+{
+    $results = array();
+    if (is_array($array)) {
+        if (isset($array[$key]) && $array[$key] == $value) {
+            $results[] = $array;
+        } //isset($array[$key]) && $array[$key] == $value
+        foreach ($array as $subarray) {
+            $results = array_merge($results, search($subarray, $key, $value));
+        } //$array as $subarray
+    } //is_array($array)
+    return $results;
+}
+function objectToArray($d)
+{
+    if (is_object($d)) {
+        // Gets the properties of the given object
+        // with get_object_vars function
+        $d = get_object_vars($d);
+    } //is_object($d)
+    if (is_array($d)) {
+        /*
+         * Return array converted to object
+         * Using __FUNCTION__ (Magic constant)
+         * for recursive call
+         */
+        return array_map(__FUNCTION__, $d);
+    } //is_array($d)
+    else {
+        // Return array
+        return $d;
+    }
+}
+$user              = Mage::helper('customer')->getCustomer()->getData();
+$email             = $user['email'];
+$magentoCurrentUrl = Mage::helper('core/url')->getCurrentUrl();
+$magentoCurrentUrl = substr($magentoCurrentUrl, 0, strpos($magentoCurrentUrl, "?"));
+// GET Users Data //
+$username          = 'jesposito@alignlife.com/token';
+$password          = 'pwgVKaZOVfMB4ps28rTi17vUpAU3nTKombjC45WE';
+$given_time        = $_POST['time'];
+if (strtotime($given_time) < time() + 5) {
+    $update = true;
+} //strtotime($given_time) < time() + 5
+else {
+ 
+}
+if ($_POST['update_type'] === 'update_ticket' && $update === true) {
+  if($_POST['mark_as_solved'] === 'solved') {
+		$status = 'solved';
+	} else {
+		$status = null;
+	}
+	 if(empty($_POST['ticket_comment'])) {
+		$comment = null;
+		$author = null;
+	} else {
+		$comment = $_POST['ticket_comment'];
+		$author = $_POST['requester_id'];
+	}
+    $url  = 'tickets/' . $_POST['ticket_id'] . '.json';
+    $arr  = array(
+        'ticket' => array(
+            'id' => $_POST['ticket_id'],
+            'comment' => array(
+                'html_body' => $comment,
+                'body' => $comment,
+                'author_id' => $author
+            ),
+			'status' => $status
+        )
+    );
+    $json = json_encode($arr);
+    $ch   = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://alignlifenutrition.zendesk.com/api/v2/{$url}");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        "Authorization: BASIC " . base64_encode($username . ":" . $password),
+        "Content-type: application/json"
+    ));
+    $json = curl_exec($ch);
+    curl_close($ch);
+    $zdu_id = $_POST['requester_id'];
+    $zd_id  = $_POST['requester_id'];
+} //$_POST['update_type'] === 'update_ticket' && $update === true
+else {
+    $url = 'users/search.json?query=' . $email . '';
+    $ch  = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://alignlifenutrition.zendesk.com/api/v2/{$url}");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        "Authorization: BASIC " . base64_encode($username . ":" . $password)
+    ));
+    $json = curl_exec($ch);
+    curl_close($ch);
+    // Start //
+    $array  = objectToArray(json_decode($json, true));
+    $zd_id  = $array['users'][0]['id'];
+    $zdu_id = $array['users'][0]['id'];
+}
+// Get Users Tickets
+if ($_GET['ticket_id'] > 0) {
+    $zd_id = $_GET['ticket_id'];
+    $url   = 'tickets/' . $zd_id . '/comments.json?include=users,last_audits,metric_sets&sort_by=created_at&sort_order=asc';
+    $ch    = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://alignlifenutrition.zendesk.com/api/v2/{$url}");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        "Authorization: BASIC " . base64_encode($username . ":" . $password)
+    ));
+    $json = curl_exec($ch);
+    curl_close($ch);
+    // Start //
+    $ticket_comments = objectToArray(json_decode($json, true));
+    $ticket_comments = $ticket_comments['comments'];
+    $ticket_users    = objectToArray(json_decode($json, true));
+    $ticket_users    = $ticket_users['users'];
+} //$_GET['ticket_id'] > 0
+// Get all User's Ticket Data
+$url = 'users/' . $zdu_id . '/tickets/requested.json?include=metric_sets,last_audits,users&sort_by=created_at&sort_order=desc';
+$ch  = curl_init();
+curl_setopt($ch, CURLOPT_URL, "https://alignlifenutrition.zendesk.com/api/v2/{$url}");
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+    "Authorization: BASIC " . base64_encode($username . ":" . $password)
+));
+$json = curl_exec($ch);
+curl_close($ch);
+// Start //
+$array        = objectToArray(json_decode($json, true));
+//echo '<pre>';
+//print_r($array);
+//echo '</pre>';
+$ticket_users = $array['users'];
+$tickets      = $array['tickets'];
+if ($_GET['ticket_id'] > 0) {
+    $search = search($tickets, 'id', $_GET['ticket_id']);
+    $ticket = $search[0];
+} //$_GET['ticket_id'] > 0
 ?>
+<style type="text/css">
+#request_comment_body {
+    border-radius: 8px;
+    border-color: #ebebeb;
+    border-shadow: 8px;
+}
+
+input.ticket_submit {
+    border-style: none;
+    height: 40px;
+    background-color: #3399CC;
+    color: #ffffff;
+    width: 130px;
+    margin-bottom: 15px;
+    margin-top: 5px;
+    border-radius: 6px;
+}
+
+div.comment-mark-as-solved label {
+    margin-top: 10px;
+}
+
+
+#newer_tickets {
+    float: left;
+    padding-left: 5px;
+    padding-bottom: 5px;
+}
+
+#older_tickets {
+    float: right;
+    padding-right: 5px;
+    padding-bottom: 5px;
+}
+
+#request_comment_body {
+    margin-left: 120px;
+    width: 100%;
+}
+
+div.comment-form-controls.clearfix {
+    margin-left: 120px;
+	
+}
+
+textarea#request_comment_body {
+    max-width: 65% ;
+}
+#comment_date {
+    float: right;
+}
+
+#comment_source {
+    font-weight: bold;
+}
+
+#comment_body {
+    margin-left: 120px;
+	margin-top:10px;
+}
+
+#comment_avatar {
+    float: left;
+    margin-right: 15px;
+	border-radius: 8px;
+
+}
+#request-table-header {
+  color: #bebebe;
+  font-size: 11px;
+  font-weight: normal;
+ 
+  
+}
+#request-table {
+  border-collapse: collapse;
+  text-align: left;
+  width: 100%;
+}
+#ticket_comment {
+    padding-bottom: 15px;
+    min-height: 100px;
+}
+</style>
 <div class="page-title">
-    <h1><?php echo $this->__('My Tickets') ?></h1>
+    <h1><?php
+echo $this->__('My Tickets');
+?></h1>
+<div class="welcome-msg">
+    <p>From your Ticket Dashboard you have the ability to view a snapshot of your recent support tickets and requests. This includes Ask a Virtual Nutritionist. Select a link below to view or details about any specific ticket.<br></p><br>
 </div>
-<?php echo $this->getMessagesBlock()->getGroupedHtml() ?>
-<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. 
-    Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero 
-    sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.
-    Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, 
-    commodo vitae, ornare sit amet, wisi. 
-</p>
+</div>
+<?php
+echo $this->getMessagesBlock()->getGroupedHtml();
+?>
 <p>
-    Aenean fermentum, elit eget tincidunt condimentum, eros 
-    ipsum rutrum orci, sagittis tempus lacus enim ac dui. Donec non enim in turpis pulvinar facilisis. 
-    Ut felis. Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna 
-    eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus,
-    metus
-</p>
+<div class="my-activities-table">
+    <table id="request-table" class="request-table my-requests">
+    <thead>
+      <tr id="request-table-header">
+        <th>ID</th>
+        <th>SUBJECT</th>
+        <th>CREATED</th>
+        <th>LAST UPDATED</th>
+		 <th>LAST UPDATED BY</th>
+        <th>STATUS</th>
+      </tr>
+    </thead>
+    <tbody>
+	
+    <?
+if ($_GET['ticket_id'] > 0) {
+    $updater_id   = $ticket['last_audit']['author_id'];
+    $user         = search($ticket_users, 'id', $updater_id);
+    $audit_author = $user[0]['name'];
+    if (empty($audit_author)) {
+        $audit_author = 'System';
+    } //empty($audit_author)
+    echo '<tr>';
+    echo '<td>' . $ticket['id'] . '</td>';
+    echo '<td>' . $ticket['subject'] . '</td>';
+    echo '<td>' . date('m-d-Y g:i a', strtotime($ticket['created_at'])) . '</td>';
+    echo '<td>' . date('m-d-Y g:i a', strtotime($ticket['updated_at'])) . '</td>';
+    echo '<td>';
+    echo $audit_author;
+    echo '</td>';
+    echo '<td>';
+    if ($ticket['status'] === 'pending') {
+        echo 'Awaiting Your Reply';
+    } //$ticket['status'] === 'pending'
+    else {
+        echo ucwords($ticket['status']);
+    }
+    echo '</td>';
+    echo '</tr>';
+} //$_GET['ticket_id'] > 0
+else {
+    foreach ($tickets as $ticket) {
+        $audit_author = $ticket['last_audit']['author_id'];
+        $user         = search($ticket_users, 'id', $audit_author);
+        $audit_author = $user[0]['name'];
+        if (empty($audit_author)) {
+            $audit_author = 'System';
+        } //empty($audit_author)
+        echo '<tr>';
+        echo '<td>' . $ticket['id'] . '</td>';
+        echo '<td><a href="' . $magentoCurrentUrl . '?ticket_id=' . $ticket['id'] . '">' . $ticket['subject'] . '</a></td>';
+        echo '<td>' . date('m-d-Y  g:i a', strtotime($ticket['created_at'])) . '</td>';
+        echo '<td>' . date('m-d-Y  g:i a', strtotime($ticket['updated_at'])) . '</td>';
+        echo '<td>';
+        echo $audit_author;
+        echo '</td>';
+        echo '<td>';
+        if ($ticket['status'] === 'pending') {
+            echo 'Awaiting Your Reply';
+        } //$ticket['status'] === 'pending'
+        else {
+            echo ucwords($ticket['status']);
+        }
+        echo '</td>';
+        echo '</tr>';
+        $ran++;
+    } //$tickets as $ticket
+}
+?>
+ 
+   </tbody>
+  </table><br><br>
+  <?
+foreach ($ticket_comments as $comment) {
+    $user = search($ticket_users, 'id', $comment['author_id']);
+    $user = $user[0];
+    if (empty($user['photo']['content_url'])) {
+        $photo = get_gravatar($user['email']);
+    } //empty($user['photo']['content_url'])
+    else {
+        $photo = $user['photo']['content_url'];
+    }
+    //   echo '<pre>';
+    //    print_r($comment);
+    //    echo '</pre>';
+    echo '<div id="ticket_comment"><div>';
+    echo '<img id="comment_avatar" src="' . $photo . '"><span id="comment_source">' . $user['name'] . '</span><span id="comment_date">' . date('m-d-Y  g:i a', strtotime($comment['created_at'])) . '</span>';
+    echo '</div>';
+    echo '<div id="comment_body"><p>';
+    echo $comment['html_body'];
+    echo '</p></div></div>';
+} //$ticket_comments as $comment
+?>
+<form accept-charset="UTF-8" action="<?
+echo $magentoCurrentUrl . '?ticket_id=' . $_GET['ticket_id'] . '';
+?>" method="post"><input name="ticket_id" type="hidden" value="<?
+echo $_GET['ticket_id'];
+?>"><input name="time" id="time" type="hidden" value=""><input name="requester_id" type="hidden" value="<?
+echo $zdu_id;
+?>"><input name="update_type" type="hidden" value="update_ticket"><div class="comment-form">
+  
+
+  <div class="comment-container">
+  <? if($_GET['ticket_id'] > 0 && $ticket['status'] !== 'closed') { 
+  echo '
+    <textarea id="request_comment_body" name="ticket_comment" placeholder="Add your reply" rows="4"></textarea>
+';
+  }?>
+    
+    
+    
+
+    <div class="comment-form-controls clearfix" style="display: block;">
+      
+
+        <? if($_GET['ticket_id'] > 0 && $ticket['status'] !== 'closed') { echo '
+        <div class="comment-mark-as-solved">
+          <input id="mark_as_solved" name="mark_as_solved" type="checkbox" value="solved">
+          <label for="mark_as_solved">Please consider this request solved</label>
+        </div>
+      ';}?>
+  <? if($_GET['ticket_id'] > 0 && $ticket['status'] !== 'closed') { echo '
+      <input class="ticket_submit" name="commit" type="submit" value="Add reply">';}?>
+    </div>
+  </div>
+</div>
+</form>
+<?
+//echo '<pre>';
+//print_r($ticket);
+//echo '</pre>';
+//echo '<pre>';
+//print_r($ticket_users);
+//echo '</pre>';
+?>	
+</div>
+  <?
+if ($_GET['ticket_id'] > 0) {
+    $ran                = 0;
+    $ticket_progression = array();
+    foreach ($tickets as $ind_ticket) {
+        $next                 = intval($ran + 1);
+        $prev                 = intval($next - 2);
+        $ticket_progression[] = array(
+            'id' => $tickets[$ran]['id'],
+            'older' => $tickets[$next]['id'],
+            'newer' => $tickets[$prev]['id']
+        );
+        $ran++;
+    } //$tickets as $ind_ticket
+    $prog         = search($ticket_progression, 'id', $_GET['ticket_id']);
+    $prog         = $prog[0];
+    $older_ticket = $prog['older'];
+    $newer_ticket = $prog['newer'];
+    echo '
+  <div id="ticket_progressor">';
+    if (empty($newer_ticket)) {
+    } //empty($newer_ticket)
+    else {
+        echo '
+  <span id="newer_tickets">
+    <p class="back-link">';
+        echo '<a href="' . $magentoCurrentUrl . '?ticket_id=' . $newer_ticket . '">';
+        echo '<small>&laquo; </small>Newer Tickets</a></p>';
+        echo '
+</span>';
+    }
+    if (empty($older_ticket)) {
+    } //empty($older_ticket)
+    else {
+        echo '
+  <span id="older_tickets">
+  <p class="back-link">';
+        echo '<a href="' . $magentoCurrentUrl . '?ticket_id=' . $older_ticket . '">';
+        echo 'Older Tickets</a><small> &laquo;</small></p>
+  </span>';
+    }
+    echo '
+  </div>';
+} //$_GET['ticket_id'] > 0
+?>
 <div class="buttons-set">
-    <p class="back-link"><a href="<?php echo $this->getUrl('customer/account/') ?>"><small>&laquo; </small><?php echo $this->__('Back') ?></a></p>
+    <p class="back-link"><a href="<?php
+if ($_GET['ticket_id'] > 0) {
+    echo $this->getUrl('customer/tickets');
+} //$_GET['ticket_id'] > 0
+else {
+    echo $this->getUrl('customer/account/');
+}
+?>"><small>&laquo; </small><?php
+if ($_GET['ticket_id'] > 0) {
+    echo 'All Tickets';
+} //$_GET['ticket_id'] > 0
+else {
+    echo 'Back to Account';
+}
+?></a></p>
 </div>
 <script type="text/javascript">
+
+</script>
+<script>
+var myVar=setInterval(function(){myTimer()},1000);
+
+function myTimer() {
+    var d = new Date();
+    document.getElementById("time").value = d.toLocaleTimeString();
+}
 </script>
